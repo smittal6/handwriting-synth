@@ -19,7 +19,7 @@ def generate_unconditionally(random_seed=1):
     #   random_seed - integer
 
     # Output:
-    #   stroke - numpy 1D-array
+    #   stroke - numpy 2D-array (T x 3)
     return stroke
 ```
 
@@ -32,7 +32,7 @@ def generate_conditionally(text='welcome to lyrebird', random_seed=1):
     #   random_seed - integer
 
     # Output:
-    #   stroke - numpy 1D-array
+    #   stroke - numpy 2D-array (T x 3)
     return stroke
 ```
 
@@ -41,11 +41,11 @@ Can you recognize the text given a stroke?
 ```
 def recognize_stroke(stroke):
     # Input:
-    #   stroke - numpy 1D-array
+    #   stroke - numpy 2D-array (T x 3)
 
     # Output:
     #   text - str
-    return stroke
+    return 'welcome to lyrebird'
 ```
 
 ### Evaluation
