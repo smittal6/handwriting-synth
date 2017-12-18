@@ -29,13 +29,40 @@ class UnconditionedHand(nn.Module):
 
         ### Now, use the idea of mixture density networks, select to get network params
         # We need to divide each row along dim 1 to get params
+        mu1 = x.index_select(dim = 1,torch.LongTensor([0,self.num_gauss - 1]))
+        mu2 = x.index_select(dim = 1,torch.LongTensor([self.num_gauss,2*self.num_gauss - 1]))
+        sigma1 = x.index_select(dim = 1,torch.LongTensor([2*self.num_gauss,3*self.num_gauss - 1]))
+        sigma2 = x.index_select(dim = 1,torch.LongTensor([3*self.num_gauss,4*self.num_gauss - 1]))
+        rho = x.index_select(dim = 1,torch.LongTensor([4*self.num_gauss,5*self.num_gauss - 1]))
+        mixprob = x.index_select(dim = 1,torch.LongTensor([5*self.num_gauss,6*self.num_gauss - 1]))
+        eos = x.index_select(dim = 1,torch.LongTensor([-1]))
+        return mu1,mu2,sigma1,sigma2,rho,mixprob,eos
 
-    def loss(self,targets,outputs):
+    def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
+
+        # In accordance with Equation 19
+        mixprob = nn.Softmax(mixprob)
+
+        # In accordance with Equation 21
+        sigma1 = sigma1.exp()
+        sigma2 = sigma2.exp()
+
+        # Equation 22
+        rho = nn.functional.Tanh(rho)
+
+        x1, x2 = x1.repeat(1,self.num_gauss),x2.repeat(1,self.num_gauss)
+        
+        return 
+
+    def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
         
         eos_index = torch.LongTensor([0])
         x_index = torch.LongTensor([1])
         y_index = torch.LongTensor([2])
 
+        # Logits because of equation 18 in [1]
         eos_loss = nn.functional.binary_cross_entropy_with_logits(outputs,targets.index_select(dim=1,eos_index))
+        gauss_loss = log_gauss(x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob)
+    
         total_loss = torch.add(eos_loss,gauss_loss)
         return total_loss
