@@ -1,5 +1,6 @@
 # Imports
 import sys
+import math
 sys.path.insert(0,'..')
 import torch
 import torch.nn as nn
@@ -29,13 +30,13 @@ class UnconditionedHand(nn.Module):
 
         ### Now, use the idea of mixture density networks, select to get network params
         # We need to divide each row along dim 1 to get params
-        mu1 = x.index_select(dim = 1,torch.LongTensor([0,self.num_gauss - 1]))
-        mu2 = x.index_select(dim = 1,torch.LongTensor([self.num_gauss,2*self.num_gauss - 1]))
-        sigma1 = x.index_select(dim = 1,torch.LongTensor([2*self.num_gauss,3*self.num_gauss - 1]))
-        sigma2 = x.index_select(dim = 1,torch.LongTensor([3*self.num_gauss,4*self.num_gauss - 1]))
-        rho = x.index_select(dim = 1,torch.LongTensor([4*self.num_gauss,5*self.num_gauss - 1]))
-        mixprob = x.index_select(dim = 1,torch.LongTensor([5*self.num_gauss,6*self.num_gauss - 1]))
-        eos = x.index_select(dim = 1,torch.LongTensor([-1]))
+        mu1 = x.index_select(1,torch.LongTensor([0,self.num_gauss - 1]))
+        mu2 = x.index_select(1,torch.LongTensor([self.num_gauss,2*self.num_gauss - 1]))
+        sigma1 = x.index_select(1,torch.LongTensor([2*self.num_gauss,3*self.num_gauss - 1]))
+        sigma2 = x.index_select(1,torch.LongTensor([3*self.num_gauss,4*self.num_gauss - 1]))
+        rho = x.index_select(1,torch.LongTensor([4*self.num_gauss,5*self.num_gauss - 1]))
+        mixprob = x.index_select(1,torch.LongTensor([5*self.num_gauss,6*self.num_gauss - 1]))
+        eos = x.index_select(1,torch.LongTensor([-1]))
         return mu1,mu2,sigma1,sigma2,rho,mixprob,eos
 
     def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
@@ -51,8 +52,14 @@ class UnconditionedHand(nn.Module):
         rho = nn.functional.Tanh(rho)
 
         x1, x2 = x1.repeat(1,self.num_gauss),x2.repeat(1,self.num_gauss)
-        
-        return 
+        z1 = (x1 - mu1)/sigma1
+        z2 = (x2 - mu2)/sigma2
+        z = z1**2 + z2**2 - 2*z1*z2*rho
+
+        normals = 1/(2*math.pi*sigma1*sigma2*math.sqrt(1-rho**2)) + (-1*z/(2*(1-rho**2))).exp()
+        normals = mixprob*normals
+        normals = normals.sum()
+        return normals
 
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
         
@@ -61,7 +68,7 @@ class UnconditionedHand(nn.Module):
         y_index = torch.LongTensor([2])
 
         # Logits because of equation 18 in [1]
-        eos_loss = nn.functional.binary_cross_entropy_with_logits(outputs,targets.index_select(dim=1,eos_index))
+        eos_loss = nn.functional.binary_cross_entropy_with_logits(outputs,targets.index_select(eos_index,dim=1))
         gauss_loss = log_gauss(x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob)
     
         total_loss = torch.add(eos_loss,gauss_loss)
