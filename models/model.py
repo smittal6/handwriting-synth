@@ -24,10 +24,10 @@ class UnconditionedHand(nn.Module):
         self.rnn = nn.LSTM(3,self.rnn_size,num_layers = 1)
         self.linear = nn.Linear(self.rnn_size, self.output_size) # For mapping back to R
 
-    def forward(self,input,hidden):
+    def forward(self,input,hidden=None):
 
         print "Shape of input: ",input.size()
-        x, (hidden_final, state_final) = self.rnn(input,hidden)
+        x, (hidden, state_final) = self.rnn(input,hidden)
         # print "Shape of Hidden_final: ",hidden_final.size()
         # print "Shape of the result returned by the RNN: ",x.size()
 
@@ -43,7 +43,7 @@ class UnconditionedHand(nn.Module):
         # print "Shape of eos: ",eos.size()
         # print "Shape of mu1: ",mu1.size()
         # print "Shape of sigma1: ",sigma1.size()
-        return mu1,mu2,sigma1,sigma2,rho,mixprob,eos
+        return mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden
 
     def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
 
@@ -51,8 +51,7 @@ class UnconditionedHand(nn.Module):
         mixprob = nn.functional.softmax(mixprob,dim=1)
 
         # In accordance with Equation 21
-        sigma1 = sigma1.exp()
-        sigma2 = sigma2.exp()
+        sigma1,sigma2 = sigma1.exp(),sigma2.exp()
 
         # Equation 22
         rho = nn.functional.tanh(rho)
@@ -95,3 +94,47 @@ class UnconditionedHand(nn.Module):
         gauss_loss = self.log_gauss(x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob) 
         total_loss = torch.add(eos_loss,gauss_loss)
         return total_loss
+
+    def multiSampler(self,mixprob):
+        """
+        Sampling from categorical distribution, for chosing the gaussian
+        """
+        mixprob = nn.functional.softmax(mixprob,dim=1)
+        temp = np.random.multinomial(1,list(mixprob.to_numpy()))
+        temp = list(temp)
+        index = temp.index(max(temp))
+        return index
+
+    def gaussSampler(self,mu1,mu2,sigma1,sigma2,rho,index):
+        """
+        Sample from the Bivariate Gaussian chosen in Step 1
+        """
+        sigma1,sigma2 = sigma1.exp(),sigma2.exp()
+        rho = nn.functional.tanh(rho)
+        u1,u2 = mu1[0][index],mu2[0][index]
+        s1,s2 = sigma1[0][index],sigma2[0][index]
+        r = rho[0][index]
+        x,y = np.random.multivariate_normal([u1,u2],[[s1*s1,r*s1*s2],[r*s1*s2,s2*s2]])
+        return x,y
+
+    def berSampler(self,eos):
+        """
+        Sampling from a Bernoulli distribution for 
+        """
+        prob = nn.functional.sigmoid(eos)
+        token = torch.bernoulli(prob)
+        return token.data[0]
+
+    def get_stroke(self,input,hidden=None,timesteps = 500):
+        """
+        Samples the stroke from the currently learned model
+        """
+        stroke = []
+        for step in range(timesteps):
+            mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden = self.forward(input,hidden)
+            index = self.multiSampler(mixprob)
+            token = self.berSampler(eos)
+            x,y = self.gaussSampler(mu1,mu2,sigma1,sigma2,rho,index)
+            to_append = [token,x,y]
+            stroke.append(to_append)
+        return np.asarray(stroke)
