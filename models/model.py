@@ -13,6 +13,7 @@ print "Done importing"
 class UnconditionedHand(nn.Module):
 
     def __init__(self,num_gauss = 20, rnn_size = 512):
+
         super(UnconditionedHand,self).__init__()
 
         self.num_gauss = num_gauss
@@ -26,7 +27,8 @@ class UnconditionedHand(nn.Module):
     def forward(self,input,hidden):
 
         print "Shape of input: ",input.size()
-        x, hidden_final = self.rnn(input,hidden)
+        x, (hidden_final, state_final) = self.rnn(input,hidden)
+        # print "Shape of Hidden_final: ",hidden_final.size()
         # print "Shape of the result returned by the RNN: ",x.size()
 
         x = x.view(-1,self.rnn_size)
