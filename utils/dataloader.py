@@ -1,14 +1,14 @@
 import math
 import os
 import sys
-sys.path.insert(0,'..')
+# sys.path.insert(0,'..')
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
 
 class StrokesDataset(Dataset):
-    """Strokes dataset."""
+    """Strokes dataset"""
 
     def __init__(self, transform=None):
         """
@@ -16,13 +16,13 @@ class StrokesDataset(Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.strokes = numpy.load('../data/strokes.npy')
-        with open('../data/sentences.txt') as f:
+        self.strokes = np.load('data/strokes.npy')
+        with open('data/sentences.txt') as f:
                 self.texts = f.readlines()
         self.transform = transform
 
     def __len__(self):
-        return len(self.strokes.shape[0])
+        return self.strokes.shape[0]
 
     def __getitem__(self, idx):
         init = self.strokes[idx]
@@ -32,5 +32,5 @@ class StrokesDataset(Dataset):
 
         if self.transform:
             sample = self.transform(sample)
-
         return sample
+
