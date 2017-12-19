@@ -26,10 +26,12 @@ class StrokesDataset(Dataset):
 
     def __getitem__(self, idx):
         init = self.strokes[idx]
-        text = self.texts[idx]
+        text = self.texts[idx].rstrip()
+        print text
+        one_hot_code = self.getOneHot(text)
         next_stroke = np.zeros(init.shape)
         next_stroke[:-1,:] = init[1:,:]
-        sample = {'initial': init, 'next': next_stroke, 'text': text}
+        sample = {'initial': init, 'next': next_stroke, 'text': text, 'encoding': one_hot_code}
 
         if self.transform:
             sample = self.transform(sample)
@@ -39,13 +41,15 @@ class StrokesDataset(Dataset):
         """
         Returns the one hot representation of the characters of the string
         """
-        alphabet = ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\".'
+        alphabet = ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".-'
         vec_len = len(alphabet)
         encoding = []
         for s in string:
             temp = np.zeros(vec_len)
-            temp[alphabet.index(s)] = 1
+            try:
+                temp[alphabet.index(s)] = 1
+            except ValueError:
+                continue
             encoding.append(temp)
         final_encoding = np.asarray(encoding)
         return final_encoding
-
