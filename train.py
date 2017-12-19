@@ -9,7 +9,8 @@ from utils.dataloader import StrokesDataset
 from utils import plot_stroke
 
 # Some HyperParams
-EPOCHS = 1
+EPOCHS = 3
+SAVE_FREQ = 1
 
 # Get the model class
 random = UnconditionedHand()
@@ -32,17 +33,22 @@ for epoch in range(EPOCHS):
         # print next_stroke
 
         init,next_stroke = Variable(init),Variable(next_stroke)
-        print init.size()
+        init = init.view(-1,1,3) # In accordance with nn.LSTM documentation.
+        # print init.size()
 
         # Zero the gradients
         optimizer.zero_grad()
 
         # Forward + Backward + Step
-        mu1,mu2,sigma1,sigma2,rho,mixprob,eos = random(init,hidden)
+        # print hidden
+        mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden = random(init,hidden)
         total_loss = random.loss(next_stroke,mu1,mu2,sigma1,sigma2,rho,mixprob,eos)
         total_loss.backward()
         optimizer.step()
+        hidden.detach_()
 
-        print "Mini, Loss Value: ",i,total_loss.data[0]
+        print "Mini, Loss Value: ",i,total_loss.data[0],"\n"
 
+        if epoch % SAVE_FREQ == SAVE_FREQ - 1:
+            torch.save(random.state_dict(),'mod_{:04d}'.format(epoch))
 
