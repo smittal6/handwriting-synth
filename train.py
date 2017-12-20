@@ -22,7 +22,7 @@ dataset = StrokesDataset()
 dataloader = torch.utils.data.DataLoader(dataset,batch_size = 1)
 
 # Optimizer
-optimizer = optim.SGD(random.parameters(), lr=0.001)
+optimizer = optim.Adam(random.parameters(), lr=0.001)
 
 for epoch in range(EPOCHS):
     # print "Epoch: ",epoch," of ",EPOCHS
@@ -44,11 +44,12 @@ for epoch in range(EPOCHS):
         mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden = random(init,hidden)
         total_loss = random.loss(next_stroke,mu1,mu2,sigma1,sigma2,rho,mixprob,eos)
         total_loss.backward()
+        nn.utils.clip_grad_norm(random.parameters(), 10)
         optimizer.step()
         hidden.detach_()
 
         print "Mini, Loss Value: ",i,total_loss.data[0],"\n"
 
-        if epoch % SAVE_FREQ == SAVE_FREQ - 1:
-            torch.save(random.state_dict(),'mod_{:04d}'.format(epoch))
+    if epoch % SAVE_FREQ == SAVE_FREQ - 1:
+        torch.save(random.state_dict(),'mod_{:04d}.net'.format(epoch))
 

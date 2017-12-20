@@ -21,13 +21,13 @@ class UnconditionedHand(nn.Module):
 
         # 1 for EOS, 6 for means, dev, correlation and mixing component
         self.output_size = 1 + 6*self.num_gauss 
-        self.rnn = nn.LSTM(3,self.rnn_size,num_layers = 1)
+        self.rnn = nn.RNN(3,self.rnn_size,num_layers = 1)
         self.linear = nn.Linear(self.rnn_size, self.output_size) # For mapping back to R
 
     def forward(self,input,hidden=None):
 
         print "Shape of input: ",input.size()
-        x, (hidden, state_final) = self.rnn(input,hidden)
+        x, hidden = self.rnn(input,hidden)
         # print "Shape of Hidden_final: ",hidden_final.size()
         # print "Shape of the result returned by the RNN: ",x.size()
 
