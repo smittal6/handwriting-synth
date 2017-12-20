@@ -42,7 +42,7 @@ class ConditionedHand(nn.Module):
 
         print "Shape of input: ",input.size()
         x, hidden1 = self.rnn1(input,hidden)
-        # print "Shape of Hidden_final: ",hidden1.size()
+        # print "Shape of H idden_final: ",hidden1.size()
         # print "Shape of the result returned by the RNN1: ",x.size()
 
         x = x.view(-1,self.rnn_size)
@@ -64,11 +64,14 @@ class ConditionedHand(nn.Module):
         print "Shape after concatenation: ",x.size()
 
         # Feed into rnn2
+        x = x.view(-1,1,self.input_rnn_size)
         x, hidden2 = self.rnn2(x)
+        print "Shape of the result after RNN2 Layer: ",x.size()
 
         # Feed into linear2 layer
         x = x.view(-1,self.rnn_size)
         x = self.linear2(x)
+        print "Shape of the result after Linear2 Layer: ",x.size()
 
         ### Now, use the idea of mixture density networks, select to get network params
         # We need to divide each row along dim 1 to get params
@@ -81,31 +84,56 @@ class ConditionedHand(nn.Module):
 
     def obtain_window(self,alpha,beta,kappa,encoding):
         """
+        THIS IS MESS RIGHT NOW
         Get the window
+        Window shape: [TSteps, vec_len]
+        Encoding Shape: [U,vec_len]
         """
-        phi = self.obtain_phi(alpha,beta,kappa,encoding)
         timesteps, vec_len, char_len  = np.asarray(alpha.size())[0], np.asarray(encoding.size())[1], np.asarray(encoding.size())[0]
 
+        phi = self.obtain_phi(alpha,beta,kappa,encoding,timesteps,vec_len,char_len)
         # phi = torch.rand(timesteps,char_len)
+        print "Shape of phi: ",phi.size()
 
-        window = torch.Tensor(timesteps,vec_len)
+        # window = nn.Parameter(torch.Tensor(timesteps,vec_len),requires_grad = True)
 
-        # print phi
         # print encoding
 
         for index in range(timesteps):
+            d = phi[index,:]
+            d = d.repeat(1,vec_len)
             temp = torch.mm(phi[index,:].view(1,char_len),encoding)
             # print "Size of temp matrix for getting the window: ",temp.size()
             window[index,:] = temp
         print "Shape of window: ",window.size()
-        return window 
+        return window
 
-    def obtain_phi(self,alpha,beta,kappa,encoding):
+    def obtain_phi(self,alpha,beta,kappa,encoding,timesteps,vec_len,char_len):
         """
         Get Phi for t and u
+        Alpha, Beta, Kappa Shape: [TimeSteps,num_wgauss]
+        Phi Shape: [TimeSteps, Char_len]
         """
+        calpha = alpha.repeat(char_len,1,1)
+        calpha = calpha.view(-1,char_len,self.num_wgauss)
+        cbeta = beta.repeat(char_len,1,1)
+        cbeta = cbeta.view(-1,char_len,self.num_wgauss)
+        ckappa = kappa.repeat(char_len,1,1)
+        ckappa = ckappa.view(-1,char_len,self.num_wgauss)
 
-        return 
+        u_vec = torch.linspace(0,char_len-1,char_len)
+        u_vec = u_vec.view(char_len,1)
+        u_vec = u_vec.repeat(1,self.num_wgauss)
+        u_vec = u_vec.repeat(timesteps,1,1)
+
+        print "Shape of cKappa: ",ckappa.size()
+        print "Shape of u_evc: ",u_vec.size()
+
+        t1 = ckappa.sub(Variable(u_vec))
+        phi = (-1*cbeta*t1).exp()
+        phi = calpha * phi
+        phi = phi.sum(dim = 2)
+        return phi
 
     def get_params(self,x):
         """
