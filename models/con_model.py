@@ -1,6 +1,7 @@
 # Imports
 import sys
 import math
+import numpy as np
 sys.path.insert(0,'..')
 import torch
 import torch.nn as nn
@@ -16,7 +17,7 @@ class ConditionedHand(nn.Module):
     Takes text as input in an encoded fashion.
     """
 
-    def __init__(self,num_gauss = 20, num_wgauss = 10, rnn_size = 512):
+    def __init__(self,vec_len,num_gauss = 20, num_wgauss = 10, rnn_size = 512):
 
         super(ConditionedHand,self).__init__()
 
@@ -24,6 +25,7 @@ class ConditionedHand(nn.Module):
         self.num_gauss = num_gauss # Density Gaussians
         self.rnn_size = rnn_size
 
+        self.input_rnn_size = 3 + vec_len
         self.output1_size = 3*self.num_wgauss
 
         # 1 for EOS, 6 for means, dev, correlation and mixing component
@@ -31,20 +33,42 @@ class ConditionedHand(nn.Module):
 
         self.rnn1 = nn.RNN(3,self.rnn_size,num_layers = 1) # [inputs, hidden-size,num_layers]
         self.linear1 = nn.Linear(self.rnn_size, self.output1_size) # For mapping back to R, to get 
-        self.rnn2 = nn.RNN(self.output1_size,self.rnn_size, num_layers = 1) # [inputs]
+        self.rnn2 = nn.RNN(self.input_rnn_size,self.rnn_size, num_layers = 1) # [inputs]
         self.linear2 = nn.Linear(self.rnn_size,self.output2_size) # For mapping back and getting MDN outputs
 
-    def forward(self,input,hidden=None):
+    def forward(self,input,encoding,hidden=None):
+
+        encoding = encoding.float().squeeze()
 
         print "Shape of input: ",input.size()
-        x, hidden = self.rnn(input,hidden)
-        # print "Shape of Hidden_final: ",hidden_final.size()
-        # print "Shape of the result returned by the RNN: ",x.size()
+        x, hidden1 = self.rnn1(input,hidden)
+        # print "Shape of Hidden_final: ",hidden1.size()
+        # print "Shape of the result returned by the RNN1: ",x.size()
 
         x = x.view(-1,self.rnn_size)
         # print "Shape after view: ",x.size()
-        x = self.linear(x) # x is Row X Columns
-        # print "Shape of the result after Linear Layer: ",x.size()
+        x = self.linear1(x) # These are the outputs as required to calculate alpha,beta,kappa
+        print "Shape of the result after Linear1 Layer: ",x.size()
+
+        # Obtain alpha,beta,kappa
+        alpha, beta, kappa = self.get_params(x)
+        print "Shape of alpha: ",alpha.size()
+        print "Shape of beta: ",beta.size()
+        print "Shape of kappa: ",kappa.size()
+
+        # Calculate Window at each time t using the output of linear1 layer
+        window = self.obtain_window(alpha,beta,kappa,encoding)
+
+        # Concatenate this window along with input
+        x = torch.cat((input.view(-1,3), window),dim = 1)
+        print "Shape after concatenation: ",x.size()
+
+        # Feed into rnn2
+        x, hidden2 = self.rnn2(x)
+
+        # Feed into linear2 layer
+        x = x.view(-1,self.rnn_size)
+        x = self.linear2(x)
 
         ### Now, use the idea of mixture density networks, select to get network params
         # We need to divide each row along dim 1 to get params
@@ -54,6 +78,46 @@ class ConditionedHand(nn.Module):
         # print "Shape of mu1: ",mu1.size()
         # print "Shape of sigma1: ",sigma1.size()
         return mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden
+
+    def obtain_window(self,alpha,beta,kappa,encoding):
+        """
+        Get the window
+        """
+        phi = self.obtain_phi(alpha,beta,kappa,encoding)
+        timesteps, vec_len, char_len  = np.asarray(alpha.size())[0], np.asarray(encoding.size())[1], np.asarray(encoding.size())[0]
+
+        # phi = torch.rand(timesteps,char_len)
+
+        window = torch.Tensor(timesteps,vec_len)
+
+        # print phi
+        # print encoding
+
+        for index in range(timesteps):
+            temp = torch.mm(phi[index,:].view(1,char_len),encoding)
+            # print "Size of temp matrix for getting the window: ",temp.size()
+            window[index,:] = temp
+        print "Shape of window: ",window.size()
+        return window 
+
+    def obtain_phi(self,alpha,beta,kappa,encoding):
+        """
+        Get Phi for t and u
+        """
+
+        return 
+
+    def get_params(self,x):
+        """
+        Gets the output of linear1 layer, and return alpha,beta,kappa at all times
+        """
+        alpha_hat, beta_hat, kappa_hat = torch.split(x,self.num_wgauss,dim = 1)
+        alpha = alpha_hat.exp()
+        beta = beta_hat.exp()
+        kappa = kappa_hat.exp()
+        for i in range(1,np.asarray(kappa_hat.size())[0]):
+            kappa[i,:] = kappa[i-1,:] + kappa[i,:]
+        return alpha,beta,kappa
 
     def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
 
