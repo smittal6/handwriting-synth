@@ -16,6 +16,8 @@ class StrokesDataset(Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
+        self.alphabet = ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-".,;?()'
+        self.vec_len = len(self.alphabet)
         self.strokes = np.load('data/strokes.npy')
         with open('data/sentences.txt') as f:
                 self.texts = f.readlines()
@@ -41,13 +43,11 @@ class StrokesDataset(Dataset):
         """
         Returns the one hot representation of the characters of the string
         """
-        alphabet = ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".-'
-        vec_len = len(alphabet)
         encoding = []
         for s in string:
-            temp = np.zeros(vec_len)
+            temp = np.zeros(self.vec_len)
             try:
-                temp[alphabet.index(s)] = 1
+                temp[self.alphabet.index(s)] = 1
             except ValueError:
                 continue
             encoding.append(temp)
