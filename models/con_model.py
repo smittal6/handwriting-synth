@@ -191,7 +191,7 @@ class ConditionedHand(nn.Module):
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
 
         targets = torch.squeeze(targets).float()
-        print "Shape of targets in loss function: ",targets.size()
+        # print "Shape of targets in loss function: ",targets.size()
         
         eos_index = Variable(torch.LongTensor([0]))
         x_index = Variable(torch.LongTensor([1]))
@@ -213,7 +213,8 @@ class ConditionedHand(nn.Module):
         """
 
         mixprob = nn.functional.softmax(mixprob,dim=1)
-        temp = np.random.multinomial(1,list(mixprob.to_numpy()))
+        probab_list = mixprob.data.numpy().flatten()
+        temp = np.random.multinomial(1,probab_list)
         temp = list(temp)
         index = temp.index(max(temp))
         return index
@@ -225,9 +226,9 @@ class ConditionedHand(nn.Module):
 
         sigma1,sigma2 = sigma1.exp(),sigma2.exp()
         rho = nn.functional.tanh(rho)
-        u1,u2 = mu1[0][index],mu2[0][index]
-        s1,s2 = sigma1[0][index],sigma2[0][index]
-        r = rho[0][index]
+        u1,u2 = mu1[0][index].data,mu2[0][index].data
+        s1,s2 = sigma1[0][index].data,sigma2[0][index].data
+        r = rho[0][index].data
         x,y = np.random.multivariate_normal([u1,u2],[[s1*s1,r*s1*s2],[r*s1*s2,s2*s2]])
         return x,y
 

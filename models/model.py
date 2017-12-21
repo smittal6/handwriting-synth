@@ -2,6 +2,7 @@
 import sys
 import math
 sys.path.insert(0,'..')
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,7 +27,7 @@ class UnconditionedHand(nn.Module):
 
     def forward(self,input,hidden=None):
 
-        print "Shape of input: ",input.size()
+        # print "Shape of input: ",input.size()
         x, hidden = self.rnn(input,hidden)
         # print "Shape of Hidden_final: ",hidden_final.size()
         # print "Shape of the result returned by the RNN: ",x.size()
@@ -100,7 +101,8 @@ class UnconditionedHand(nn.Module):
         Sampling from categorical distribution, for chosing the gaussian
         """
         mixprob = nn.functional.softmax(mixprob,dim=1)
-        temp = np.random.multinomial(1,list(mixprob.to_numpy()))
+        probab_list = mixprob.data.numpy().flatten()
+        temp = np.random.multinomial(1,probab_list)
         temp = list(temp)
         index = temp.index(max(temp))
         return index
@@ -111,9 +113,10 @@ class UnconditionedHand(nn.Module):
         """
         sigma1,sigma2 = sigma1.exp(),sigma2.exp()
         rho = nn.functional.tanh(rho)
-        u1,u2 = mu1[0][index],mu2[0][index]
-        s1,s2 = sigma1[0][index],sigma2[0][index]
-        r = rho[0][index]
+        u1,u2 = mu1[0][index].data,mu2[0][index].data
+        # print u1,u2
+        s1,s2 = sigma1[0][index].data,sigma2[0][index].data
+        r = rho[0][index].data
         x,y = np.random.multivariate_normal([u1,u2],[[s1*s1,r*s1*s2],[r*s1*s2,s2*s2]])
         return x,y
 
@@ -125,7 +128,7 @@ class UnconditionedHand(nn.Module):
         token = torch.bernoulli(prob)
         return token.data[0]
 
-    def get_stroke(self,input,hidden=None,timesteps = 300):
+    def get_stroke(self,input,hidden=None,timesteps = 500):
         """
         Samples the stroke from the currently learned model
         """
