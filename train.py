@@ -8,8 +8,14 @@ from models.model import UnconditionedHand
 from utils.dataloader import StrokesDataset
 from utils import plot_stroke
 
+def get_testinput():
+    start_stroke = np.asarray(0,0,0)
+    start = torch.from_numpy(start_stroke)
+    start = Variable(start)
+    return start
+
 # Some HyperParams
-EPOCHS = 3
+EPOCHS = 100
 SAVE_FREQ = 1
 
 # Get the model class
@@ -51,5 +57,7 @@ for epoch in range(EPOCHS):
         print "Mini, Loss Value: ",i,total_loss.data[0],"\n"
 
     if epoch % SAVE_FREQ == SAVE_FREQ - 1:
-        torch.save(random.state_dict(),'mod_{:04d}.net'.format(epoch))
-
+        torch.save(random.state_dict(),'uncon.model')
+        test1 = torch.load('uncon.model')
+        test_in = get_testinput()
+        plot_stroke(test1.get_stroke(test_in))

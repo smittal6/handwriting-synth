@@ -79,7 +79,7 @@ class UnconditionedHand(nn.Module):
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
 
         targets = torch.squeeze(targets).float()
-        print "Shape of targets in loss function: ",targets.size()
+        # print "Shape of targets in loss function: ",targets.size()
         
         eos_index = Variable(torch.LongTensor([0]))
         x_index = Variable(torch.LongTensor([1]))
@@ -125,7 +125,7 @@ class UnconditionedHand(nn.Module):
         token = torch.bernoulli(prob)
         return token.data[0]
 
-    def get_stroke(self,input,hidden=None,timesteps = 500):
+    def get_stroke(self,input,hidden=None,timesteps = 300):
         """
         Samples the stroke from the currently learned model
         """
