@@ -52,30 +52,32 @@ class ConditionedHand(nn.Module):
         x = x.view(-1,self.rnn_size)
         # print "Shape after view: ",x.size()
         x = self.linear1(x) # These are the outputs as required to calculate alpha,beta,kappa
-        print "Shape of the result after Linear1 Layer: ",x.size()
+        # print "Shape of the result after Linear1 Layer: ",x.size()
+        # print "ID of x after linear1 layer: ",id(x)
 
         # Obtain alpha,beta,kappa
         alpha, beta, kappa = self.get_params(x)
-        print "Shape of alpha: ",alpha.size()
-        print "Shape of beta: ",beta.size()
-        print "Shape of kappa: ",kappa.size()
+        # print "Shape of alpha: ",alpha.size()
+        # print "Shape of beta: ",beta.size()
+        # print "Shape of kappa: ",kappa.size()
 
         # Calculate Window at each time t using the output of linear1 layer
         window = self.obtain_window(alpha,beta,kappa,encoding)
 
         # Concatenate this window along with input
         x = torch.cat((input.view(-1,3), window),dim = 1)
-        print "Shape after concatenation: ",x.size()
+        # print "ID of x after concatenating with window layer: ",id(x)
+        # print "Shape after concatenation: ",x.size()
 
         # Feed into rnn2
         x = x.view(-1,1,self.input_rnn_size)
         x, hidden2 = self.rnn2(x,hidden2)
-        print "Shape of the result after RNN2 Layer: ",x.size()
+        # print "Shape of the result after RNN2 Layer: ",x.size()
 
         # Feed into linear2 layer
         x = x.view(-1,self.rnn_size)
         x = self.linear2(x)
-        print "Shape of the result after Linear2 Layer: ",x.size()
+        # print "Shape of the result after Linear2 Layer: ",x.size()
 
         ### Now, use the idea of mixture density networks, select to get network params
         # We need to divide each row along dim 1 to get params
@@ -100,13 +102,19 @@ class ConditionedHand(nn.Module):
 
         phi = self.obtain_phi(alpha,beta,kappa,encoding,timesteps,vec_len,char_len)
         # phi = Variable(torch.rand(timesteps,char_len)) # For testing the correctness
+        # print "ID of phi in obtain_window after obtaining phi: ",id(phi)
         # print "Shape of phi: ",phi.size()
-        # print type(phi)
 
         # phi = phi.repeat(vec_len,1,1)
+        # print "ID of phi in obtain_window: ",id(phi)
         # phi = phi.permute(1,2,0)
+        # print "ID of phi in obtain_window: ",id(phi)
+        # print "Type of encoding: ",type(encoding)
+        # print "Type of phi ",type(phi)
         window = encoding*phi
+        # print "ID of window in obtain_window: ",id(window)
         window = window.sum(dim = 1)
+        # print "ID of window in obtain_window: ",id(window)
         # print "Check window size: ",window.size()
 
         return window
@@ -119,29 +127,40 @@ class ConditionedHand(nn.Module):
         Phi Shape: [TimeSteps, Char_len]
         """
 
-        calpha = alpha.clone().repeat(char_len,1,1)
+        calpha = alpha.repeat(char_len,1,1)
+        # print "ID of calpha in obtain_phi: ",id(calpha)
         calpha = calpha.view(-1,char_len,self.num_wgauss)
-        cbeta = beta.clone().repeat(char_len,1,1)
+        # print "ID of calpha in obtain_phi: ",id(calpha)
+        cbeta = beta.repeat(char_len,1,1)
+        # print "ID of cbeta in obtain_phi: ",id(cbeta)
         cbeta = cbeta.view(-1,char_len,self.num_wgauss)
-        ckappa = kappa.clone().repeat(char_len,1,1)
+        # print "ID of cbeta in obtain_phi: ",id(cbeta)
+        ckappa = kappa.repeat(char_len,1,1)
+        # print "ID of ckappa in obtain_phi: ",id(ckappa)
         ckappa = ckappa.view(-1,char_len,self.num_wgauss)
+        # print "ID of ckappa in obtain_phi: ",id(ckappa)
 
-        u_vec = Variable(torch.linspace(0,char_len-1,char_len))
+        u_vec = Variable(torch.linspace(0,char_len-1,char_len),requires_grad = False)
+        # print "ID of u_vec in obtain_phi: ",id(u_vec)
         u_vec = u_vec.view(char_len,1)
-        u_vec = u_vec.clone().repeat(1,self.num_wgauss)
-        u_vec = u_vec.clone().repeat(timesteps,1,1)
+        # print "ID of u_vec in obtain_phi: ",id(u_vec)
+        u_vec = u_vec.repeat(1,self.num_wgauss)
+        # print "ID of u_vec in obtain_phi: ",id(u_vec)
+        u_vec = u_vec.repeat(timesteps,1,1)
+        # print "ID of u_vec in obtain_phi: ",id(u_vec)
 
-        print "Shape of cKappa: ",ckappa.size()
-        print "Shape of u_vec: ",u_vec.size()
+        # print "Shape of cKappa: ",ckappa.size()
+        # print "Shape of u_vec: ",u_vec.size()
 
-        t1 = ckappa.sub(u_vec)
-        t2 = (-1*cbeta*t1).exp()
-        t3 = calpha * t2
-        t4 = t3.sum(dim = 2)
+        phi = ckappa.sub(u_vec)
+        phi = (-1*cbeta*phi).exp()
+        phi = calpha * phi
+        phi = phi.sum(dim = 2)
 
         # phi = Variable(torch.rand(timesteps,char_len)) # For testing the correctness
-        t5 = t4.clone().repeat(vec_len,1,1)
-        phi = t5.clone().permute(1,2,0)
+        phi = phi.repeat(vec_len,1,1)
+        phi = phi.permute(1,2,0)
+        # print "ID of phi in obtain_phi: ",id(phi)
         return phi
 
     def get_params(self,x):

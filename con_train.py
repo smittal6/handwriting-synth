@@ -17,12 +17,13 @@ def get_testinput(dataset,text):
     start = torch.from_numpy(start_stroke).float()
     start = Variable(start)
     start = start.view(-1,1,3)
+    encoding = dataset.getOneHot(text)
+    encoding = Variable(encoding)
     return start,encoding
 
 def test(dataset,save_image=None,text="welcome to lyrebird"):
-
-    test1 = ConditionedHand()
-    test1.load_state_dict(torch.load('save/conditioned.model'))
+    test1 = ConditionedHand(dataset.vec_len)
+    test1.load_state_dict(torch.load('./save/conditioned.model'))
     test_in,encoding = get_testinput(dataset,text)
     stroke = test1.get_stroke(test_in,encoding)
     plot_stroke(stroke,save_name = save_image)
@@ -72,11 +73,11 @@ for epoch in range(EPOCHS):
             print "Mini, Loss Value: ",i,total_loss.data[0],"\n"
 
             if  i == LEN/4 - 1:
-                torch.save(random.state_dict(),'save/conditioned.model')
-                test(dataset,save_image = 'save/condtest.jpg')
+                torch.save(random.state_dict(),'./save/conditioned.model')
+                # test(dataset,save_image = './save/condtest.jpg')
 
     except KeyboardInterrupt:
         print "Saving model, and generating a random file"
-        torch.save(random.state_dict(),'save/conditioned.model')
-        test(dataset,save_image = 'save/condtest.jpg')
+        torch.save(random.state_dict(),'./save/conditioned.model')
+        # test(dataset,save_image = './save/condtest.jpg')
         sys.exit()
