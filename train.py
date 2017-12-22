@@ -18,9 +18,11 @@ def get_testinput():
 
 def test(save_image=None):
     test1 = UnconditionedHand()
-    test1.load_state_dict(torch.load('save/ncon.model'))
+    test1.load_state_dict(torch.load('./save/uncon.model'))
     test_in = get_testinput()
     stroke = test1.get_stroke(test_in)
+    print stroke.shape
+    print stroke
     plot_stroke(stroke,save_name = save_image)
     
 
@@ -67,12 +69,12 @@ for epoch in range(EPOCHS):
             print "Mini, Loss Value: ",i,total_loss.data[0],"\n"
 
             if  i == LEN/4 - 1:
-                torch.save(random.state_dict(),'save/uncon.model')
-                test(save_image = 'save/unctest.png')
+                torch.save(random.state_dict(),'./save/uncon.model')
+                test(save_image = './save/unctest.png')
 
     except KeyboardInterrupt:
         print "Saving model, and generating a random file"
-        torch.save(random.state_dict(),'save/uncon.model')
-        test(save_image = 'save/unctest.png')
+        # torch.save(random.state_dict(),'./save/uncon.model')
+        test(save_image = './save/unctest.png')
         sys.exit()
 

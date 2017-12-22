@@ -100,8 +100,11 @@ class UnconditionedHand(nn.Module):
         """
         Sampling from categorical distribution, for chosing the gaussian
         """
-        mixprob = nn.functional.softmax(mixprob,dim=1)
+        mixprob = nn.functional.softmax(mixprob.double(),dim=1)
+        # print type(mixprob.data)
         probab_list = mixprob.data.numpy().flatten()
+        # print probab_list.dtype
+        # print probab_list.sum().dtype
         temp = np.random.multinomial(1,probab_list)
         temp = list(temp)
         index = temp.index(max(temp))
