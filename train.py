@@ -21,8 +21,10 @@ def test(save_image=None):
     test1.load_state_dict(torch.load('./save/uncon.model'))
     test_in = get_testinput()
     stroke = test1.get_stroke(test_in)
+    stroke = stroke.astype(np.float32)
     print stroke.shape
     print stroke
+    print stroke.dtype
     plot_stroke(stroke,save_name = save_image)
     
 

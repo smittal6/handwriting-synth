@@ -22,6 +22,9 @@ def get_testinput(dataset,text):
     return start,encoding
 
 def test(dataset,save_image=None,text="welcome to lyrebird"):
+    """
+    Generate and Plot a stroke from already existing model
+    """
     test1 = ConditionedHand(dataset.vec_len)
     test1.load_state_dict(torch.load('./save/conditioned.model'))
     test_in,encoding = get_testinput(dataset,text)
@@ -79,5 +82,5 @@ for epoch in range(EPOCHS):
     except KeyboardInterrupt:
         print "Saving model, and generating a random file"
         torch.save(random.state_dict(),'./save/conditioned.model')
-        # test(dataset,save_image = './save/condtest.jpg')
+        test(dataset,save_image = './save/condtest.jpg')
         sys.exit()

@@ -101,10 +101,7 @@ class UnconditionedHand(nn.Module):
         Sampling from categorical distribution, for chosing the gaussian
         """
         mixprob = nn.functional.softmax(mixprob.double(),dim=1)
-        # print type(mixprob.data)
         probab_list = mixprob.data.numpy().flatten()
-        # print probab_list.dtype
-        # print probab_list.sum().dtype
         temp = np.random.multinomial(1,probab_list)
         temp = list(temp)
         index = temp.index(max(temp))
@@ -125,8 +122,9 @@ class UnconditionedHand(nn.Module):
 
     def berSampler(self,eos):
         """
-        Sampling from a Bernoulli distribution for 
+        Sampling from a Bernoulli distribution for EOS
         """
+
         prob = nn.functional.sigmoid(eos)
         token = torch.bernoulli(prob)
         return token.data[0]
@@ -135,7 +133,7 @@ class UnconditionedHand(nn.Module):
         """
         Samples the stroke from the currently learned model
         """
-        stroke = []
+        stroke = [[0,0,0]]
         for step in range(timesteps):
             mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden = self.forward(input,hidden)
             index = self.multiSampler(mixprob)
