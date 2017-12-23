@@ -9,7 +9,6 @@ import torch.optim as optim
 from torch.autograd import Variable
 from utils import plot_stroke
 
-print "Done importing"
 
 class ConditionedHand(nn.Module):
     """
@@ -23,51 +22,44 @@ class ConditionedHand(nn.Module):
 
         self.num_wgauss = num_wgauss # Window Gaussians
         self.num_gauss = num_gauss # Density Gaussians
-        self.rnn_size = rnn_size
 
+        self.rnn_size = rnn_size
         self.input_rnn_size = 3 + vec_len
         self.output1_size = 3*self.num_wgauss
+        self.output2_size = 1 + 6*self.num_gauss # 1 for EOS, 6 for means, dev, correlation and mixing component
 
-        # 1 for EOS, 6 for means, dev, correlation and mixing component
-        self.output2_size = 1 + 6*self.num_gauss 
-
+        # Layer defs
         self.rnn1 = nn.RNN(3,self.rnn_size,num_layers = 1) # [inputs, hidden-size,num_layers]
         self.linear1 = nn.Linear(self.rnn_size, self.output1_size) # For mapping back to R, to get 
         self.rnn2 = nn.RNN(self.input_rnn_size,self.rnn_size, num_layers = 1) # [inputs]
         self.linear2 = nn.Linear(self.rnn_size,self.output2_size) # For mapping back and getting MDN outputs
 
+
     def forward(self,input,encoding,hidden1=None,hidden2=None):
         """
         Forward pass function.
+        Args:
+            input: the stroke data, with format: [EOS, Delta_x, Delta_y]
+            encoding: one-hot representation of the given string with time along dim 0
+            hidden1: hidden state of RNN which models attention params
+            hidden2: hidden state of the final RNN modelling the gaussian mixture params
         """
-
-        # encoding = encoding.float().squeeze() # Don't care about batch now
-        # print "Shape of encoding: ",encoding.size()
 
         print "Shape of input: ",input.size()
         x, hidden1 = self.rnn1(input,hidden1)
-        # print "Shape of H idden_final: ",hidden1.size()
         # print "Shape of the result returned by the RNN1: ",x.size()
 
         x = x.view(-1,self.rnn_size)
-        # print "Shape after view: ",x.size()
-        x = self.linear1(x) # These are the outputs as required to calculate alpha,beta,kappa
-        # print "Shape of the result after Linear1 Layer: ",x.size()
-        # print "ID of x after linear1 layer: ",id(x)
+        x = self.linear1(x)
 
         # Obtain alpha,beta,kappa
         alpha, beta, kappa = self.get_params(x)
-        # print "Shape of alpha: ",alpha.size()
-        # print "Shape of beta: ",beta.size()
-        # print "Shape of kappa: ",kappa.size()
 
         # Calculate Window at each time t using the output of linear1 layer
-        window = self.obtain_window(alpha,beta,kappa,encoding)
+        window = self.obtain_window(alpha.clone(),beta.clone(),kappa.clone(),encoding)
 
         # Concatenate this window along with input
         x = torch.cat((input.view(-1,3), window),dim = 1)
-        # print "ID of x after concatenating with window layer: ",id(x)
-        # print "Shape after concatenation: ",x.size()
 
         # Feed into rnn2
         x = x.view(-1,1,self.input_rnn_size)
@@ -79,102 +71,78 @@ class ConditionedHand(nn.Module):
         x = self.linear2(x)
         # print "Shape of the result after Linear2 Layer: ",x.size()
 
-        ### Now, use the idea of mixture density networks, select to get network params
-        # We need to divide each row along dim 1 to get params
+        # Use the idea of mixture density networks, select to get network params
         mu1,mu2,sigma1,sigma2,rho,mixprob,eos = torch.split(x,self.num_gauss,dim = 1)
 
         return mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden1,hidden2
 
+
     def obtain_window(self,alpha,beta,kappa,encoding):
         """
-
-        Get the window for all timesteps
-        Window shape: [TimeSteps, vec_len]
-        Phi shape: [TimeSteps, char_len]
-        Encoding Shape: [char_len,vec_len]
-
+        Get the window for all timesteps.
+        Args:
+            alpha,beta,kappa: shape ~ [timesteps,num_wgauss]
+            Encoding: shape ~ [char_len,vec_len], char_len = U in paper.
+        Returns:
+            Window: shape ~ [timesteps, vec_len]
         """
 
+        # Get some crucial lengths
         timesteps, vec_len, char_len  = np.asarray(alpha.size())[0], np.asarray(encoding.size())[1], np.asarray(encoding.size())[0]
+        # print "Shape of encoding in obtain_window: ",encoding.size()
 
-        encoding = encoding.repeat(timesteps,1,1)
-        # print "Shape of time repeated encoding: ",encoding.size() # [timesteps,char_len,vec_len]
+        window = Variable(torch.Tensor(timesteps,vec_len))
 
-        phi = self.obtain_phi(alpha,beta,kappa,encoding,timesteps,vec_len,char_len)
-        # phi = Variable(torch.rand(timesteps,char_len)) # For testing the correctness
-        # print "ID of phi in obtain_window after obtaining phi: ",id(phi)
-        # print "Shape of phi: ",phi.size()
-
-        # phi = phi.repeat(vec_len,1,1)
-        # print "ID of phi in obtain_window: ",id(phi)
-        # phi = phi.permute(1,2,0)
-        # print "ID of phi in obtain_window: ",id(phi)
-        # print "Type of encoding: ",type(encoding)
-        # print "Type of phi ",type(phi)
-        window = encoding*phi
-        # print "ID of window in obtain_window: ",id(window)
-        window = window.sum(dim = 1)
-        # print "ID of window in obtain_window: ",id(window)
-        # print "Check window size: ",window.size()
+        for t in range(timesteps):
+            # From this for loop I get window for each t.
+            phi = self.obtain_phi(alpha,beta,kappa,t,vec_len,char_len) # phi ~ [1, char_len]
+            window[t,:] = torch.mm(phi,encoding)
 
         return window
 
 
-    def obtain_phi(self,alpha,beta,kappa,encoding,timesteps,vec_len,char_len):
+    def obtain_phi(self,alpha,beta,kappa,which_t,vec_len,char_len):
         """
-        Get Phi for t and u
-        Alpha, Beta, Kappa Shape: [TimeSteps,num_wgauss]
-        Phi Shape: [TimeSteps, Char_len]
+        Args:
+            alpha,beta,kappa: shape ~ [timesteps,num_wgauss]
+            which_t: for indexing in alpha,beta,kappa according to timestep currently being processed
+        Returns:
+            phi_t: phi for a timestep for all u. Shape ~ [1, char_len]
         """
-
-        calpha = alpha.repeat(char_len,1,1)
-        # print "ID of calpha in obtain_phi: ",id(calpha)
-        calpha = calpha.view(-1,char_len,self.num_wgauss)
-        # print "ID of calpha in obtain_phi: ",id(calpha)
-        cbeta = beta.repeat(char_len,1,1)
-        # print "ID of cbeta in obtain_phi: ",id(cbeta)
-        cbeta = cbeta.view(-1,char_len,self.num_wgauss)
-        # print "ID of cbeta in obtain_phi: ",id(cbeta)
-        ckappa = kappa.repeat(char_len,1,1)
-        # print "ID of ckappa in obtain_phi: ",id(ckappa)
-        ckappa = ckappa.view(-1,char_len,self.num_wgauss)
-        # print "ID of ckappa in obtain_phi: ",id(ckappa)
 
         u_vec = Variable(torch.linspace(0,char_len-1,char_len),requires_grad = False)
-        # print "ID of u_vec in obtain_phi: ",id(u_vec)
         u_vec = u_vec.view(char_len,1)
-        # print "ID of u_vec in obtain_phi: ",id(u_vec)
         u_vec = u_vec.repeat(1,self.num_wgauss)
-        # print "ID of u_vec in obtain_phi: ",id(u_vec)
-        u_vec = u_vec.repeat(timesteps,1,1)
-        # print "ID of u_vec in obtain_phi: ",id(u_vec)
+        # print u_vec
 
-        # print "Shape of cKappa: ",ckappa.size()
-        # print "Shape of u_vec: ",u_vec.size()
+        phi_t = u_vec - kappa[which_t,:]
+        phi_t = (-1*beta[which_t,:]*phi_t**2).exp()
+        phi_t = alpha[which_t,:] * phi_t 
+        phi_t = phi_t.sum(dim = 1) # Summing along num_wgauss
+        phi_t = phi_t.view(1,char_len) # Reshaping
 
-        phi = ckappa.sub(u_vec)
-        phi = (-1*cbeta*phi).exp()
-        phi = calpha * phi
-        phi = phi.sum(dim = 2)
+        return phi_t
 
-        # phi = Variable(torch.rand(timesteps,char_len)) # For testing the correctness
-        phi = phi.repeat(vec_len,1,1)
-        phi = phi.permute(1,2,0)
-        # print "ID of phi in obtain_phi: ",id(phi)
-        return phi
 
     def get_params(self,x):
         """
-        Gets the output of linear1 layer, and return alpha,beta,kappa at all times
+        Args:
+            x: The output of linear1 layer
+        Returns: 
+            alpha,beta,kappa for all timesteps        
         """
 
         alpha_hat, beta_hat, kappa_hat = torch.split(x,self.num_wgauss,dim = 1)
         alpha = alpha_hat.exp()
         beta = beta_hat.exp()
-        kappa = kappa_hat.exp()
+        kappa_exp = kappa_hat.exp()
+
+        kappa = Variable(torch.Tensor(kappa_exp.size()))
+        kappa[0,:] = kappa_exp[0,:]
         for i in range(1,np.asarray(kappa_hat.size())[0]):
-            kappa[i,:] = kappa[i-1,:] + kappa[i,:]
+            kappa[i,:] = kappa[i-1,:] + kappa_exp[i,:]
         return alpha,beta,kappa
+
 
     def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
 
@@ -186,9 +154,6 @@ class ConditionedHand(nn.Module):
 
         # Equation 22
         rho = nn.functional.tanh(rho)
-        # print "Shape of rho: ",rho.size()
-        # print "Shape of mu1: ",mu1.size()
-        # print "Shape of sigma1: ",sigma1.size()
 
         x1, x2 = x1.repeat(1,self.num_gauss),x2.repeat(1,self.num_gauss)
         # print "Shape of x1: ",x1.size()
@@ -206,6 +171,7 @@ class ConditionedHand(nn.Module):
         # print "Shape of normals: ",normals.size()
         normals = normals.sum()
         return normals
+
 
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
 
@@ -226,17 +192,19 @@ class ConditionedHand(nn.Module):
         total_loss = torch.add(eos_loss,gauss_loss)
         return total_loss
 
+
     def multiSampler(self,mixprob):
         """
         Sampling from categorical distribution, for chosing the gaussian
         """
 
-        mixprob = nn.functional.softmax(mixprob,dim=1)
+        mixprob = nn.functional.softmax(mixprob.double(),dim=1)
         probab_list = mixprob.data.numpy().flatten()
         temp = np.random.multinomial(1,probab_list)
         temp = list(temp)
         index = temp.index(max(temp))
         return index
+
 
     def gaussSampler(self,mu1,mu2,sigma1,sigma2,rho,index):
         """
@@ -251,21 +219,23 @@ class ConditionedHand(nn.Module):
         x,y = np.random.multivariate_normal([u1,u2],[[s1*s1,r*s1*s2],[r*s1*s2,s2*s2]])
         return x,y
 
+
     def berSampler(self,eos):
         """
-        Sampling from a Bernoulli distribution for 
+        Sampling from a Bernoulli distribution for EOS
         """
 
         prob = nn.functional.sigmoid(eos)
         token = torch.bernoulli(prob)
         return token.data[0]
 
+
     def get_stroke(self,input,encoding,hidden1 = None,hidden2 = None,timesteps = 500):
         """
         Samples the stroke from the currently learned model
         """
 
-        stroke = []
+        stroke = [[0,0,0]]
         for step in range(timesteps):
             mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden1,hidden2 = self.forward(input,encoding,hidden1,hidden2)
             index = self.multiSampler(mixprob)
