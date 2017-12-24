@@ -73,7 +73,7 @@ class UnconditionedHand(nn.Module):
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
 
         targets = torch.squeeze(targets).float()
-        print "Shape of targets in loss function: ",targets.size()
+        # print "Shape of targets in loss function: ",targets.size()
         
         eos_true,x1,x2 = torch.split(targets,1,dim = 1)
 

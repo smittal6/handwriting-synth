@@ -45,7 +45,7 @@ class ConditionedHand(nn.Module):
             hidden2: hidden state of the final RNN modelling the gaussian mixture params
         """
 
-        print "Shape of input: ",input.size()
+        # print "Shape of input: ",input.size()
         x, hidden1 = self.rnn1(input,hidden1)
         # print "Shape of the result returned by the RNN1: ",x.size()
 
