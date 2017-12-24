@@ -19,9 +19,9 @@ class UnconditionedHand(nn.Module):
 
         self.num_gauss = num_gauss
         self.rnn_size = rnn_size
+        self.output_size = 1 + 6*self.num_gauss  # 1 for EOS, 6 for means, dev, correlation and mixing component
 
-        # 1 for EOS, 6 for means, dev, correlation and mixing component
-        self.output_size = 1 + 6*self.num_gauss 
+        # Layer defs
         self.rnn = nn.RNN(3,self.rnn_size,num_layers = 1)
         self.linear = nn.Linear(self.rnn_size, self.output_size) # For mapping back to R
 
@@ -29,21 +29,14 @@ class UnconditionedHand(nn.Module):
 
         # print "Shape of input: ",input.size()
         x, hidden = self.rnn(input,hidden)
-        # print "Shape of Hidden_final: ",hidden_final.size()
-        # print "Shape of the result returned by the RNN: ",x.size()
 
         x = x.view(-1,self.rnn_size)
         # print "Shape after view: ",x.size()
         x = self.linear(x) # x is Row X Columns
-        # print "Shape of the result after Linear Layer: ",x.size()
 
-        ### Now, use the idea of mixture density networks, select to get network params
-        # We need to divide each row along dim 1 to get params
+        # Now, use the idea of mixture density networks, select to get network params
         mu1,mu2,sigma1,sigma2,rho,mixprob,eos = torch.split(x,self.num_gauss,dim = 1)
 
-        # print "Shape of eos: ",eos.size()
-        # print "Shape of mu1: ",mu1.size()
-        # print "Shape of sigma1: ",sigma1.size()
         return mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden
 
     def log_gauss(self,x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob):
@@ -56,12 +49,11 @@ class UnconditionedHand(nn.Module):
 
         # Equation 22
         rho = nn.functional.tanh(rho)
-        # print "Shape of rho: ",rho.size()
-        # print "Shape of mu1: ",mu1.size()
-        # print "Shape of sigma1: ",sigma1.size()
 
         x1, x2 = x1.repeat(1,self.num_gauss),x2.repeat(1,self.num_gauss)
         # print "Shape of x1: ",x1.size()
+
+
         z1 = (x1 - mu1)/sigma1
         z2 = (x2 - mu2)/sigma2
         z = z1**2 + z2**2 - 2*z1*z2*rho
@@ -75,31 +67,32 @@ class UnconditionedHand(nn.Module):
         
         # print "Shape of normals: ",normals.size()
         normals = normals.sum()
+
         return normals
 
     def loss(self,targets,mu1,mu2,sigma1,sigma2,rho,mixprob,eos):
 
         targets = torch.squeeze(targets).float()
-        # print "Shape of targets in loss function: ",targets.size()
+        print "Shape of targets in loss function: ",targets.size()
         
-        eos_index = Variable(torch.LongTensor([0]))
-        x_index = Variable(torch.LongTensor([1]))
-        y_index = Variable(torch.LongTensor([2]))
+        eos_true,x1,x2 = torch.split(targets,1,dim = 1)
 
         # Logits because of equation 18 in [1]
-        eos_loss = nn.functional.binary_cross_entropy_with_logits(eos,targets.index_select(1,eos_index))
+        eos_loss = nn.functional.binary_cross_entropy_with_logits(eos,eos_true)
 
         # Log Prob loss
-        x1 = targets.index_select(1,x_index)
-        x2 = targets.index_select(1,y_index)
         gauss_loss = self.log_gauss(x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob) 
+
+        # Add both the losses
         total_loss = torch.add(eos_loss,gauss_loss)
+
         return total_loss
 
     def multiSampler(self,mixprob):
         """
         Sampling from categorical distribution, for chosing the gaussian
         """
+
         mixprob = nn.functional.softmax(mixprob.double(),dim=1)
         probab_list = mixprob.data.numpy().flatten()
         temp = np.random.multinomial(1,probab_list)
@@ -111,6 +104,7 @@ class UnconditionedHand(nn.Module):
         """
         Sample from the Bivariate Gaussian chosen in Step 1
         """
+
         sigma1,sigma2 = sigma1.exp(),sigma2.exp()
         rho = nn.functional.tanh(rho)
         u1,u2 = mu1[0][index].data,mu2[0][index].data
@@ -133,6 +127,7 @@ class UnconditionedHand(nn.Module):
         """
         Samples the stroke from the currently learned model
         """
+
         stroke = [[0,0,0]]
         for step in range(timesteps):
             mu1,mu2,sigma1,sigma2,rho,mixprob,eos,hidden = self.forward(input,hidden)

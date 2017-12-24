@@ -170,6 +170,7 @@ class ConditionedHand(nn.Module):
         
         # print "Shape of normals: ",normals.size()
         normals = normals.sum()
+
         return normals
 
 
@@ -178,18 +179,17 @@ class ConditionedHand(nn.Module):
         targets = torch.squeeze(targets).float()
         # print "Shape of targets in loss function: ",targets.size()
         
-        eos_index = Variable(torch.LongTensor([0]))
-        x_index = Variable(torch.LongTensor([1]))
-        y_index = Variable(torch.LongTensor([2]))
+        eos_true,x1,x2 = torch.split(targets,1,dim = 1)
 
         # Logits because of equation 18 in [1]
-        eos_loss = nn.functional.binary_cross_entropy_with_logits(eos,targets.index_select(1,eos_index))
+        eos_loss = nn.functional.binary_cross_entropy_with_logits(eos,eos_true)
 
         # Log Prob loss
-        x1 = targets.index_select(1,x_index)
-        x2 = targets.index_select(1,y_index)
         gauss_loss = self.log_gauss(x1,x2,mu1,mu2,sigma1,sigma2,rho,mixprob) 
+
+        # Add both the losses
         total_loss = torch.add(eos_loss,gauss_loss)
+
         return total_loss
 
 
